@@ -54,9 +54,9 @@ function get_status() { # Get status from the pkgctl-r8152 driver
     #       - ACTIVE_STATUS must be "active"
     #       - LOAD_STATUS must be "loaded"
     #       - ENABLE_STATUS must be "enabled"
-    printf "\npkgctl-r8152 ACTIVE_STATUS = %s\n" $ACTIVE_STATUS
-    printf "pkgctl-r8152 LOAD_STATUS = %s\n" $LOAD_STATUS
-    printf "pkgctl-r8152 ENABLE_STATUS = %s\n\n" $ENABLE_STATUS
+    printf "\n\tpkgctl-r8152 ACTIVE_STATUS = %s\n" $ACTIVE_STATUS
+    printf "\tpkgctl-r8152 LOAD_STATUS = %s\n" $LOAD_STATUS
+    printf "\tpkgctl-r8152 ENABLE_STATUS = %s\n\n" $ENABLE_STATUS
     if [[ "${ACTIVE_STATUS}" != "active" ]] || [[ "${LOAD_STATUS}" != "loaded" ]] || [[ "${ENABLE_STATUS}" != "enabled" ]]; then
         # The driver need to be restarted or reloaded
         return 1
@@ -83,7 +83,7 @@ function driver_restart_reload() {
 
     # Disable IPv6
     if [[ "${IPV6}" == "no" ]]; then
-        printf "Deactivation of IPv6 on interface %s\n" $INTERFACE
+        printf "\tDeactivation of IPv6 on interface %s\n" $INTERFACE
         ip -6 addr flush $INTERFACE
     fi
 }
@@ -97,10 +97,10 @@ function ping_gateway() { # Check gateway availability to ping
     fi
 
     if [ -z "$GATEWAY" ]; then
-        printf "\nError ! No gateway found with the 'ip r' command...\n"
+        printf "\n\tError ! No gateway found with the 'ip r' command...\n"
         return 99
     else
-        printf "Gateway is = %s\n" $GATEWAY
+        printf "\tGateway is = %s\n" $GATEWAY
         ping -I $INTERFACE -q -t 2 -c 1 $GATEWAY >/dev/null && return 0 || return 1
     fi
 }
@@ -113,17 +113,29 @@ function ping_gateway() { # Check gateway availability to ping
 # Or after some time, the driver may fail, and the connectivity won't work anymore.
 # This will check the connectivity to the gateway/ip provided, and the decide what to do
 
+get_status
+RESULT=$?
+if [[ $RESULT -eq 0 ]]; then
+    printf "\tThe driver status are OK ! No need to do something more.\n"
+    # No need to do something more here
+elif [[ $RESULT -eq 1 ]]; then
+    printf "\tThe driver status AREN'T OK !\n\tThe driver need to be restarted or reloaded !\n"
+    driver_restart_reload
+else
+    printf "\tUnknown error with get_status() ! code = %d\n" $RESULT
+fi
+
 ping_gateway
 RESULT=$?
 
 if [[ $RESULT -eq 0 ]]; then
-    printf "Gateway $GATEWAY is accessible ! No need to do something more.\n"
+    printf "\tGateway %s is accessible ! No need to do something more.\n" $GATEWAY
     # No need to do something more
 elif [[ $RESULT -eq 1 ]]; then
-    printf "Gateway %s IS NOT accessible !\nThe driver need to be restarted or reloaded !\n" $GATEWAY
+    printf "\tGateway %s IS NOT accessible !\n\tThe driver need to be restarted or reloaded !\n" $GATEWAY
     driver_restart_reload
 else
-    printf "Unknown error ! code = %d\n" $RESULT
+    printf "\tUnknown error with ping_gateway() ! code = %d\n" $RESULT
 fi
 exit $RESULT
 

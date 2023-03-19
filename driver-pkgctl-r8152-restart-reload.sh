@@ -80,10 +80,17 @@ function get_status() { # Get status from the pkgctl-r8152 driver
     LOAD_STATUS=$(synosystemctl get-load-status pkgctl-r8152)
     ENABLE_STATUS=$(synosystemctl get-enable-status pkgctl-r8152)
 
+    PACKAGE_VERSION=$(synopkg version r8152)
+    PACKAGE_ONOFF=$(synopkg is_onoff r8152)
+
     # Test if the status above are normal :
     #       - ACTIVE_STATUS must be "active"
     #       - LOAD_STATUS must be "loaded"
     #       - ENABLE_STATUS must be "enabled"
+    printf "\t"
+    printf %s "$PACKAGE_ONOFF"
+    printf " , version is %s\n" $PACKAGE_VERSION
+
     printf "\n\tpkgctl-r8152 ACTIVE_STATUS = %s\n" $ACTIVE_STATUS
     printf "\tpkgctl-r8152 LOAD_STATUS = %s\n" $LOAD_STATUS
     printf "\tpkgctl-r8152 ENABLE_STATUS = %s\n\n" $ENABLE_STATUS

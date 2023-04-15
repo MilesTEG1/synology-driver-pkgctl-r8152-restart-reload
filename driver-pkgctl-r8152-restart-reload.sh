@@ -25,21 +25,6 @@ ARG1=$1
 ARG2=$2
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
-# ~~~~~~~~~~ Check if root access ~~~~~~~~~ #
-if [[ "$EUID" = 0 ]]; then
-    echo "(1) already root"
-else
-    echo "You're not root... sudoing now..."
-    sudo -k # make sure to ask for password on next sudo
-    if sudo true; then
-        echo "(2) correct password"
-    else
-        echo "(3) wrong password"
-        exit 1
-    fi
-fi
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
-
 # ====================================================================================== #
 # ============================= Variables needed to be set ============================= #
 # ====================================================================================== #
@@ -61,9 +46,30 @@ GATEWAY=""
 # GATEWAY="192.168.2.203"
 
 ## Variables Gotify
+
+# Set GOTIFY_NOTIF to   false to disable gotify notification
+#                       true to enable gotify notification
+GOTIFY_NOTIF=true
+
 GOTIFY_URL=https://gotify.ndd.tld
 GOTIFY_TOKEN=xxxx-token-xxx
+
 # ====================================================================================== #
+
+# ~~~~~~~~~~ Check if root access ~~~~~~~~~ #
+if [[ "$EUID" = 0 ]]; then
+    echo "(1) already root"
+else
+    echo "You're not root... sudoing now..."
+    sudo -k # make sure to ask for password on next sudo
+    if sudo true; then
+        echo "(2) correct password"
+    else
+        echo "(3) wrong password"
+        exit 1
+    fi
+fi
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
 # ====================================================================================== #
 # ====================== Some variables needed, but not to touch ! ===================== #
@@ -155,19 +161,22 @@ function send_gotify_notification() {
     # On va envoyer une notification toutes les 2 heures si tout va bien pour le pilote
     # Sinon la notification partira quoiqu'il arrive.
     # Vérification de l'heure : heure paire notification, heure impaire pas de notification
-    HEURE=$(date +"%H")
-    MINUTES=$(date +"%M")
-    HEURE_PAIRE=""
-    MINUTES_ZERO=""
-    [[ $((HEURE % 2)) -eq 0 ]] && HEURE_PAIRE="OUI" || HEURE_PAIRE="NON"
-    [[ $MINUTES -eq 0 ]] && MINUTES_ZERO="OUI" || MINUTES_ZERO="NON"
+    #
+    if [ "$GOTIFY_NOTIF" = true ]; then
+        HEURE=$(date +"%H")
+        MINUTES=$(date +"%M")
+        HEURE_PAIRE=""
+        MINUTES_ZERO=""
+        [[ $((HEURE % 2)) -eq 0 ]] && HEURE_PAIRE="OUI" || HEURE_PAIRE="NON"
+        [[ $MINUTES -eq 0 ]] && MINUTES_ZERO="OUI" || MINUTES_ZERO="NON"
 
-    # Si heure paire et GOTIFY_PRIORITY_SUCCESS, ou bien si GOTIFY_PRIORITY_ERROR ou GOTIFY_PRIORITY_FAIL, on envoi une notification
-    if [[ "${GOTIFY_ALWAYS}" == "OUI" ]] || [ ${GOTIFY_PRIORITY} -eq ${GOTIFY_PRIORITY_ERROR} ] || [ ${GOTIFY_PRIORITY} -eq ${GOTIFY_PRIORITY_FAIL} ] || { [ ${GOTIFY_PRIORITY} -eq ${GOTIFY_PRIORITY_SUCCESS} ] && [[ "${HEURE_PAIRE}" == "OUI" ]] && [[ "MINUTES_ZERO" == "OUI" ]]; }; then
-        URL="${GOTIFY_URL}/message?token=${GOTIFY_TOKEN}"
-        printf "\n\tSending Gotify Notification...\n"
-        /usr/bin/curl -s -S --data '{"message": "'"${MESSAGE}"'", "title": "'"${TITLE}"'", "priority":'"${GOTIFY_PRIORITY}"', "extras": {"client::display": {"contentType": "text/markdown"}}}' -X POST -H Content-Type:application/json "${URL}" &>/dev/null
-        printf "\n"
+        # Si heure paire et GOTIFY_PRIORITY_SUCCESS, ou bien si GOTIFY_PRIORITY_ERROR ou GOTIFY_PRIORITY_FAIL, on envoi une notification
+        if [[ "${GOTIFY_ALWAYS}" == "OUI" ]] || [ ${GOTIFY_PRIORITY} -eq ${GOTIFY_PRIORITY_ERROR} ] || [ ${GOTIFY_PRIORITY} -eq ${GOTIFY_PRIORITY_FAIL} ] || { [ ${GOTIFY_PRIORITY} -eq ${GOTIFY_PRIORITY_SUCCESS} ] && [[ "${HEURE_PAIRE}" == "OUI" ]] && [[ "MINUTES_ZERO" == "OUI" ]]; }; then
+            URL="${GOTIFY_URL}/message?token=${GOTIFY_TOKEN}"
+            printf "\n\tSending Gotify Notification...\n"
+            /usr/bin/curl -s -S --data '{"message": "'"${MESSAGE}"'", "title": "'"${TITLE}"'", "priority":'"${GOTIFY_PRIORITY}"', "extras": {"client::display": {"contentType": "text/markdown"}}}' -X POST -H Content-Type:application/json "${URL}" &>/dev/null
+            printf "\n"
+        fi
     fi
 }
 
@@ -271,7 +280,7 @@ function ping_gateway() { # Check gateway availability to ping
 function reactivate_eth0() {
     sudo ifconfig eth0 up
     disable_ipv6 eth0
-    eth0_IP=$(ip addr show eth0 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1)
+    eth0_IP=$(ip addr show eth0 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1) # Thanks to : https://askubuntu.com/a/560466
     printf "\n\teth0 should be up now. You can connect the NAS on %s in order to sort things out...\nExiting script now.\n" $eth0_IP
     MESSAGE="$MESSAGE\n\teth0 should be up now. You can connect the NAS on $eth0_IP in order to sort things out...\nExiting script now.\n"
     GOTIFY_PRIORITY=${GOTIFY_PRIORITY_FAIL}

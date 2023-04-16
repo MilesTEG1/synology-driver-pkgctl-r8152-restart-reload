@@ -164,6 +164,7 @@ function send_gotify_notification() {
     #
     if [ "$GOTIFY_NOTIF" = true ]; then
         HEURE=$(date +"%H")
+        HEURE=${HEURE#0}
         MINUTES=$(date +"%M")
         HEURE_PAIRE=""
         MINUTES_ZERO=""

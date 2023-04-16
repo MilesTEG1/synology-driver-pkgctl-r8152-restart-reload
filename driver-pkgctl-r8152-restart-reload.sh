@@ -20,17 +20,17 @@
 #   2. Another launched every 5 or 10 minutes, in order to ensure the driver is working fine
 
 # ~~~~~ Arguments passed to the script ~~~~ #
-NB_PARAM=$#
-ARG1=$1
-ARG2=$2
+nb_param=$#
+arg1=$1
+arg2=$2
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
 # ====================================================================================== #
 # ============================= Variables needed to be set ============================= #
 # ====================================================================================== #
 
-#   Set to no for no IPV6, or yes to let IPv6 activated
-IPV6="no"
+#   Set to no for no ipv6, or yes to let ipv6 activated
+ipv6="no"
 
 #   Set to the interface you want to check : eth0 or eth1, or eth2 ...
 #   In Synology NAS :
@@ -38,21 +38,21 @@ IPV6="no"
 #       - eth1 = LAN2
 #       - eth2 = LAN3
 #       - eth3 = LAN4
-INTERFACE="eth2"
+interface="eth2"
 
-#   Set the Gateway to test (could be whatever IP address you want to ping)
+#   Set the gateway to test (could be whatever IP address you want to ping)
 #   or let the script determine the default gateway set by setting the value to "".
-GATEWAY=""
-# GATEWAY="192.168.2.203"
+gateway=""
+# gateway="192.168.2.203"
 
 ## Variables Gotify
 
-# Set GOTIFY_NOTIF to   false to disable gotify notification
+# Set gotify_notif to   false to disable gotify notification
 #                       true to enable gotify notification
-GOTIFY_NOTIF=true
+gotify_notif=true
 
-GOTIFY_URL=https://gotify.ndd.tld
-GOTIFY_TOKEN=xxxx-token-xxx
+gotify_url=https://gotify.ndd.tld
+gotify_token=xxxx-token-xxx
 
 # ====================================================================================== #
 
@@ -74,21 +74,21 @@ fi
 # ====================================================================================== #
 # ====================== Some variables needed, but not to touch ! ===================== #
 # ====================================================================================== #
-DRIVER_OK_KO=""
-ITERATION_status=0
-ITERATION_ping=0
+driver_ok_ko=""
+iteration_status=0
+iteration_ping=0
 
 ## Variables Gotify
-GOTIFY_PRIORITY_SUCCESS=2
-GOTIFY_PRIORITY_ERROR=4
-GOTIFY_PRIORITY_FAIL=8
+gotify_priority_success=2
+gotify_priority_error=4
+gotify_priority_fail=8
 
 #Default values
-GOTIFY_PRIORITY=${GOTIFY_PRIORITY_ERROR}
-MESSAGE=""
-TITLE="Script : $(basename "$0")"
-MODE=""
-GOTIFY_ALWAYS=""
+gotify_priority=${gotify_priority_error}
+message=""
+title="Script : $(basename "$0")"
+mode=""
+gotify_always=""
 # ====================================================================================== #
 
 # ====================================================================================== #
@@ -108,21 +108,21 @@ display_help() {
     exit 1
 }
 
-if [[ NB_PARAM -gt 2 || NB_PARAM -eq 0 ]]; then
+if [[ nb_param -gt 2 || nb_param -eq 0 ]]; then
     display_help
 else
-    case $ARG1 in
+    case $arg1 in
     -h | --help)
         display_help
         ;;
     boot)
-        MODE="boot"
+        mode="boot"
         ;;
     task)
-        MODE="task"
+        mode="task"
         ;;
     manual)
-        MODE="manual"
+        mode="manual"
         ;;
         # ... (same format for other required arguments)
     *)
@@ -132,26 +132,26 @@ else
     esac
 fi
 
-if [[ "${ARG2}" == "--notify" ]] || [[ "${ARG2}" == "-n" ]]; then
-    GOTIFY_ALWAYS="OUI"
-elif [[ "${ARG2}" != "--notify" ]] && [[ -n "${ARG2}" ]]; then
+if [[ "${arg2}" == "--notify" ]] || [[ "${arg2}" == "-n" ]]; then
+    gotify_always="oui"
+elif [[ "${arg2}" != "--notify" ]] && [[ -n "${arg2}" ]]; then
     echo "Unknown 2nd parameter passed: $1"
     display_help
-elif [[ -z "${ARG2}" ]]; then
-    GOTIFY_ALWAYS="NON"
+elif [[ -z "${arg2}" ]]; then
+    gotify_always="non"
 fi
 
-if [[ "${MODE}" == "boot" ]] || [[ "${MODE}" == "manual" ]]; then
-    GOTIFY_ALWAYS="OUI"
-elif [[ "${MODE}" == "task" ]]; then
-    GOTIFY_ALWAYS="NON"
+if [[ "${mode}" == "boot" ]] || [[ "${mode}" == "manual" ]]; then
+    gotify_always="oui"
+elif [[ "${mode}" == "task" ]]; then
+    gotify_always="non"
 fi
 
 # DEBUG
-# echo "Parameter n°1 = $ARG1"
-# echo "Parameter n°2 = $ARG2"
-# echo "MODE = $MODE"
-# echo "GOTIFY_ALWAYS = $GOTIFY_ALWAYS"
+# echo "Parameter n°1 = $arg1"
+# echo "Parameter n°2 = $arg2"
+# echo "mode = $mode"
+# echo "gotify_always = $gotify_always"
 # ====================================================================================== #
 
 # ====================================================================================== #
@@ -162,20 +162,21 @@ function send_gotify_notification() {
     # Sinon la notification partira quoiqu'il arrive.
     # Vérification de l'heure : heure paire notification, heure impaire pas de notification
     #
-    if [ "$GOTIFY_NOTIF" = true ]; then
-        HEURE=$(date +"%H")
-        HEURE=${HEURE#0}
-        MINUTES=$(date +"%M")
-        HEURE_PAIRE=""
-        MINUTES_ZERO=""
-        [[ $((HEURE % 2)) -eq 0 ]] && HEURE_PAIRE="OUI" || HEURE_PAIRE="NON"
-        [[ $MINUTES -eq 0 ]] && MINUTES_ZERO="OUI" || MINUTES_ZERO="NON"
+    if [ "$gotify_notif" = true ]; then
+        heure=10#$(date +"%H")
+        minutes=10#$(date +"%M")
+        heure_paire=""
+        minutes_zero=""
+        ((heure % 2 == 0)) && heure_paire="oui" || heure_paire="non"
+        ((minutes == 0)) && minutes_zero="oui" || minutes_zero="non"
 
-        # Si heure paire et GOTIFY_PRIORITY_SUCCESS, ou bien si GOTIFY_PRIORITY_ERROR ou GOTIFY_PRIORITY_FAIL, on envoi une notification
-        if [[ "${GOTIFY_ALWAYS}" == "OUI" ]] || [ ${GOTIFY_PRIORITY} -eq ${GOTIFY_PRIORITY_ERROR} ] || [ ${GOTIFY_PRIORITY} -eq ${GOTIFY_PRIORITY_FAIL} ] || { [ ${GOTIFY_PRIORITY} -eq ${GOTIFY_PRIORITY_SUCCESS} ] && [[ "${HEURE_PAIRE}" == "OUI" ]] && [[ "MINUTES_ZERO" == "OUI" ]]; }; then
-            URL="${GOTIFY_URL}/message?token=${GOTIFY_TOKEN}"
+        # Si heure paire et gotify_priority_success, ou bien si gotify_priority_error ou gotify_priority_fail, on envoi une notification
+
+        if [[ "${gotify_always}" == "oui" ]] || [ ${gotify_priority} -eq ${gotify_priority_error} ] || [ ${gotify_priority} -eq ${gotify_priority_fail} ] || { [ ${gotify_priority} -eq ${gotify_priority_success} ] && (( heure % 2 == 0 && minutes == 0 )); }; then
+        # if [[ "${gotify_always}" == "oui" ]] || [ ${gotify_priority} -eq ${gotify_priority_error} ] || [ ${gotify_priority} -eq ${gotify_priority_fail} ] || { [ ${gotify_priority} -eq ${gotify_priority_success} ] && [[ "${heure_paire}" == "oui" ]] && [[ "${minutes_zero}" == "oui" ]]; }; then
+            URL="${gotify_url}/message?token=${gotify_token}"
             printf "\n\tSending Gotify Notification...\n"
-            /usr/bin/curl -s -S --data '{"message": "'"${MESSAGE}"'", "title": "'"${TITLE}"'", "priority":'"${GOTIFY_PRIORITY}"', "extras": {"client::display": {"contentType": "text/markdown"}}}' -X POST -H Content-Type:application/json "${URL}" &>/dev/null
+            /usr/bin/curl -s -S --data '{"message": "'"${message}"'", "title": "'"${title}"'", "priority":'"${gotify_priority}"', "extras": {"client::display": {"contentType": "text/markdown"}}}' -X POST -H Content-Type:application/json "${URL}" &>/dev/null
             printf "\n"
         fi
     fi
@@ -198,56 +199,56 @@ function driver_restart_reload() {
 }
 
 function disable_ipv6() {
-    _INTERFACE=$1
-    # Disable IPv6
-    if [[ "${IPV6}" == "no" ]] && [[ $(cat /proc/net/if_inet6 | grep $_INTERFACE) != "" ]]; then
-        printf "\tDeactivation of IPv6 on interface %s in 5s...\n" $_INTERFACE
-        MESSAGE="$MESSAGE\tDeactivation of IPv6 on interface $_INTERFACE in 5s...\n"
+    _interface=$1
+    # Disable ipv6
+    if [[ "${ipv6}" == "no" ]] && [[ $(cat /proc/net/if_inet6 | grep $_interface) != "" ]]; then
+        printf "\tDeactivation of ipv6 on interface %s in 5s...\n" $_interface
+        message="$message\tDeactivation of ipv6 on interface $_interface in 5s...\n"
         sleep 5s
-        sudo ip -6 addr flush $_INTERFACE
+        sudo ip -6 addr flush $_interface
     fi
 }
 
 function get_status() { # Get status from the pkgctl-r8152 driver
 
-    ITERATION_status=$((ITERATION_status + 1))
+    iteration_status=$((iteration_status + 1))
 
-    ACTIVE_STATUS=$(sudo synosystemctl get-active-status pkgctl-r8152)
-    LOAD_STATUS=$(sudo synosystemctl get-load-status pkgctl-r8152)
-    ENABLE_STATUS=$(sudo synosystemctl get-enable-status pkgctl-r8152)
+    active_status=$(sudo synosystemctl get-active-status pkgctl-r8152)
+    load_status=$(sudo synosystemctl get-load-status pkgctl-r8152)
+    enable_status=$(sudo synosystemctl get-enable-status pkgctl-r8152)
 
-    PACKAGE_VERSION=$(sudo synopkg version r8152)
-    PACKAGE_ONOFF=$(sudo synopkg is_onoff r8152)
+    package_version=$(sudo synopkg version r8152)
+    package_onoff=$(sudo synopkg is_onoff r8152)
 
     # Test if the status above are normal :
-    #       - ACTIVE_STATUS must be "active"
-    #       - LOAD_STATUS must be "loaded"
-    #       - ENABLE_STATUS must be "enabled"
+    #       - active_status must be "active"
+    #       - load_status must be "loaded"
+    #       - enable_status must be "enabled"
     printf "\t"
-    printf %s "$PACKAGE_ONOFF"
-    printf " , version is %s\n" $PACKAGE_VERSION
+    printf %s "$package_onoff"
+    printf " , version is %s\n" $package_version
 
-    printf "\n\tpkgctl-r8152 ACTIVE_STATUS = %s\n" $ACTIVE_STATUS
-    printf "\tpkgctl-r8152 LOAD_STATUS = %s\n" $LOAD_STATUS
-    printf "\tpkgctl-r8152 ENABLE_STATUS = %s\n\n" $ENABLE_STATUS
+    printf "\n\tpkgctl-r8152 active_status = %s\n" $active_status
+    printf "\tpkgctl-r8152 load_status = %s\n" $load_status
+    printf "\tpkgctl-r8152 enable_status = %s\n\n" $enable_status
 
-    MESSAGE="$MESSAGE\t\n\tpkgctl-r8152 ACTIVE_STATUS = $ACTIVE_STATUS\n"
-    MESSAGE="$MESSAGE\tpkgctl-r8152 LOAD_STATUS = $LOAD_STATUS\n"
-    MESSAGE="$MESSAGE\tpkgctl-r8152 ENABLE_STATUS = $ENABLE_STATUS\n\n"
+    message="$message\t\n\tpkgctl-r8152 active_status = $active_status\n"
+    message="$message\tpkgctl-r8152 load_status = $load_status\n"
+    message="$message\tpkgctl-r8152 enable_status = $enable_status\n\n"
 
-    if [[ "${ACTIVE_STATUS}" != "active" ]] || [[ "${LOAD_STATUS}" != "loaded" ]] || [[ "${ENABLE_STATUS}" != "enabled" ]]; then
+    if [[ "${active_status}" != "active" ]] || [[ "${load_status}" != "loaded" ]] || [[ "${enable_status}" != "enabled" ]]; then
         # The driver need to be restarted or reloaded
         printf "\tThe driver status AREN'T OK !\n\tThe driver need to be restarted or reloaded !\n"
-        MESSAGE="$MESSAGE\tThe driver status AREN'T OK !\n\tThe driver need to be restarted or reloaded !\n"
-        DRIVER_OK_KO="KO"
-    elif [[ "${ACTIVE_STATUS}" = "active" ]] && [[ "${LOAD_STATUS}" = "loaded" ]] && [[ "${ENABLE_STATUS}" = "enabled" ]]; then
+        message="$message\tThe driver status AREN'T OK !\n\tThe driver need to be restarted or reloaded !\n"
+        driver_ok_ko="KO"
+    elif [[ "${active_status}" = "active" ]] && [[ "${load_status}" = "loaded" ]] && [[ "${enable_status}" = "enabled" ]]; then
         # The driver is well started and loaded
         printf "\tThe driver status are OK ! No need to do something more.\n"
-        MESSAGE="$MESSAGE\tThe driver status are OK ! No need to do something more.\n"
+        message="$message\tThe driver status are OK ! No need to do something more.\n"
         # No need to do something more here
     else
         printf "\tUnknown error with get_status() ! code = %d\n" $RESULT
-        MESSAGE="$MESSAGE\tUnknown error with get_status() ! code = $RESULT\n"
+        message="$message\tUnknown error with get_status() ! code = $RESULT\n"
         send_gotify_notification
         exit 1
     fi
@@ -255,25 +256,25 @@ function get_status() { # Get status from the pkgctl-r8152 driver
 
 function ping_gateway() { # Check gateway availability to ping
 
-    ITERATION_ping=$((ITERATION_ping + 1))
+    iteration_ping=$((iteration_ping + 1))
 
-    # Checking if the GATEWAY is set to a value or not.
+    # Checking if the gateway is set to a value or not.
     # If not, this will determine the default gateway
-    if [[ -z "${GATEWAY}" ]]; then
-        GATEWAY=$(sudo ip r | grep default | cut -d ' ' -f 3)
+    if [[ -z "${gateway}" ]]; then
+        gateway=$(sudo ip r | grep default | cut -d ' ' -f 3)
     fi
 
-    if [ -z "$GATEWAY" ]; then
+    if [ -z "$gateway" ]; then
         printf "\n\tError ! No gateway found with the 'ip r' command...\n"
-        MESSAGE="$MESSAGE\n\tError ! No gateway found with the 'ip r' command...\n"
+        message="$message\n\tError ! No gateway found with the 'ip r' command...\n"
 
         send_gotify_notification
         exit 99
     else
-        printf "\tGateway is = %s\n" $GATEWAY
-        MESSAGE="$MESSAGE\tGateway is = $GATEWAY\n"
+        printf "\tgateway is = %s\n" $gateway
+        message="$message\tgateway is = $gateway\n"
 
-        sudo ping -I $INTERFACE -q -t 2 -c 1 $GATEWAY >/dev/null && PING="OK" || PING="not-OK"
+        sudo ping -I $interface -q -t 2 -c 1 $gateway >/dev/null && PING="OK" || PING="not-OK"
     fi
 
 }
@@ -283,8 +284,8 @@ function reactivate_eth0() {
     disable_ipv6 eth0
     eth0_IP=$(ip addr show eth0 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1) # Thanks to : https://askubuntu.com/a/560466
     printf "\n\teth0 should be up now. You can connect the NAS on %s in order to sort things out...\nExiting script now.\n" $eth0_IP
-    MESSAGE="$MESSAGE\n\teth0 should be up now. You can connect the NAS on $eth0_IP in order to sort things out...\nExiting script now.\n"
-    GOTIFY_PRIORITY=${GOTIFY_PRIORITY_FAIL}
+    message="$message\n\teth0 should be up now. You can connect the NAS on $eth0_IP in order to sort things out...\nExiting script now.\n"
+    gotify_priority=${gotify_priority_fail}
     send_gotify_notification
     exit 1
 }
@@ -293,11 +294,11 @@ function deactivate_eth0_if_up() {
     # Test if eth0 is already down or still up
     if [[ -n "$(ip a show eth0 up)" ]]; then
         printf "\n\teth0 is still up and running. Shutting down now.\n"
-        MESSAGE="$MESSAGE\n\teth0 is still up and running. Shutting down now.\n"
+        message="$message\n\teth0 is still up and running. Shutting down now.\n"
         sudo ifconfig eth0 down
     else
         printf "\n\teth0 is already down.\n"
-        MESSAGE="$MESSAGE\n\teth0 is already down.\n"
+        message="$message\n\teth0 is already down.\n"
     fi
 
 }
@@ -317,13 +318,13 @@ for ((i = 1; i < 3; i++)); do
 
     get_status
 
-    if [[ "${DRIVER_OK_KO}" == "KO" ]]; then
+    if [[ "${driver_ok_ko}" == "KO" ]]; then
         # The driver status AREN'T OK !
         # The driver need to be restarted or reloaded !
         if ((i == 2)); then
             # We are on the 2nd try, and the driver is still not OK !
-            printf "\n\tThe driver is still not OK on the 2nd try !\nThat's not good...\nIt means the %s isn't working... So let's reactivate the eth0 interface." $INTERFACE
-            MESSAGE="$MESSAGE\n\tThe driver is still not OK on the 2nd try !\nThat's not good...\nIt means the $INTERFACE isn't working... So let's reactivate the eth0 interface."
+            printf "\n\tThe driver is still not OK on the 2nd try !\nThat's not good...\nIt means the %s isn't working... So let's reactivate the eth0 interface." $interface
+            message="$message\n\tThe driver is still not OK on the 2nd try !\nThat's not good...\nIt means the $interface isn't working... So let's reactivate the eth0 interface."
             reactivate_eth0
         fi
 
@@ -337,14 +338,14 @@ for ((i = 1; i < 3; i++)); do
             # Ping isn't OK...
             if ((i == 1)); then
                 # This is the first run
-                printf "\tGateway %s IS NOT accessible !\n\tThe driver need to be restarted or reloaded !\n" $GATEWAY
-                MESSAGE="$MESSAGE\tGateway $GATEWAY IS NOT accessible !\n\tThe driver need to be restarted or reloaded !\n"
-                DRIVER_OK_KO="KO"
+                printf "\tgateway %s IS NOT accessible !\n\tThe driver need to be restarted or reloaded !\n" $gateway
+                message="$message\tgateway $gateway IS NOT accessible !\n\tThe driver need to be restarted or reloaded !\n"
+                driver_ok_ko="KO"
                 driver_restart_reload
             else
                 # This is the 2nd run
-                printf "\tThis is the second try, and the ping on this try isn't OK... \nIt means the %s isn't working... So let's reactivate the eth0 interface." $INTERFACE
-                MESSAGE="$MESSAGE\tThis is the second try, and the ping on this try isn't OK... \nIt means the $INTERFACE isn't working... So let's reactivate the eth0 interface."
+                printf "\tThis is the second try, and the ping on this try isn't OK... \nIt means the %s isn't working... So let's reactivate the eth0 interface." $interface
+                message="$message\tThis is the second try, and the ping on this try isn't OK... \nIt means the $interface isn't working... So let's reactivate the eth0 interface."
                 reactivate_eth0
             fi
 
@@ -352,20 +353,20 @@ for ((i = 1; i < 3; i++)); do
             # Ping is OK
             if ((i == 1)); then
                 # This is the first run
-                printf "\tGateway %s is accessible ! No need to do something more.\n" $GATEWAY
-                MESSAGE="$MESSAGE\tGateway $GATEWAY is accessible !\t\nNo need to do something more.\n"
-                disable_ipv6 $INTERFACE
+                printf "\tgateway %s is accessible ! No need to do something more.\n" $gateway
+                message="$message\tgateway $gateway is accessible !\t\nNo need to do something more.\n"
+                disable_ipv6 $interface
                 deactivate_eth0_if_up
-                GOTIFY_PRIORITY=${GOTIFY_PRIORITY_SUCCESS}
+                gotify_priority=${gotify_priority_success}
                 send_gotify_notification
                 exit 0
             else
                 # This is the 2nd run
-                printf "\tGateway %s is now accessible (on the 2nd run) !\nNote : the status wasn't OK before...\n" $GATEWAY
-                MESSAGE="$MESSAGE\tGateway $GATEWAY is accessible !\t\nNo need to do something more.\n"
-                disable_ipv6 $INTERFACE
+                printf "\tgateway %s is now accessible (on the 2nd run) !\nNote : the status wasn't OK before...\n" $gateway
+                message="$message\tgateway $gateway is accessible !\t\nNo need to do something more.\n"
+                disable_ipv6 $interface
                 deactivate_eth0_if_up
-                GOTIFY_PRIORITY=${GOTIFY_PRIORITY_ERROR}
+                gotify_priority=${gotify_priority_error}
                 send_gotify_notification
                 exit 1
             fi

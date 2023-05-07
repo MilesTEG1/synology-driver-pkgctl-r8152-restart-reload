@@ -184,7 +184,7 @@ function send_gotify_notification() {
 
 function driver_restart_reload() {
     # Restart or reload the driver
-    # sudo synosystemctl reload-or-restart pkgctl-r8152
+    sudo synosystemctl reload-or-restart pkgctl-r8152
     echo ""
     # For the record, here some synosystemctl commands:
     #   start [--no-block] NAME...              Start (activate) one or more units

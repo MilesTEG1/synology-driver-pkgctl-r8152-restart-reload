@@ -29,16 +29,21 @@ arg2=$2
 # ============================= Variables needed to be set ============================= #
 # ====================================================================================== #
 
-#   Set to no for no ipv6, or yes to let ipv6 activated
+#   Set to no for no ipv6, or yes to let ipv6 activated (global parameter: it's for all interfaces)
 ipv6="no"
 
-#   Set to the interface you want to check : eth0 or eth1, or eth2 ...
+#   Set to the interface in 2,5G/5G you want to check : eth0 or eth1, or eth2 ...
 #   In Synology NAS :
 #       - eth0 = LAN1
 #       - eth1 = LAN2
 #       - eth2 = LAN3
 #       - eth3 = LAN4
 interface="eth2"
+
+# Add embedded interfaces you want to disable when $interface is up and running correctly
+# and enable when $interface isn't working correctly.
+# Choose wisely!
+embedded_interface_to_deactivate=("eth0" "eth1")
 
 #   Set the gateway to test (could be whatever IP address you want to ping)
 #   or let the script determine the default gateway set by setting the value to "".
@@ -172,11 +177,13 @@ function send_gotify_notification() {
 
         # Si heure paire et gotify_priority_success, ou bien si gotify_priority_error ou gotify_priority_fail, on envoi une notification
 
-        if [[ "${gotify_always}" == "oui" ]] || [ ${gotify_priority} -eq ${gotify_priority_error} ] || [ ${gotify_priority} -eq ${gotify_priority_fail} ] || { [ ${gotify_priority} -eq ${gotify_priority_success} ] && (( heure % 2 == 0 && minutes == 0 )); }; then
-        # if [[ "${gotify_always}" == "oui" ]] || [ ${gotify_priority} -eq ${gotify_priority_error} ] || [ ${gotify_priority} -eq ${gotify_priority_fail} ] || { [ ${gotify_priority} -eq ${gotify_priority_success} ] && [[ "${heure_paire}" == "oui" ]] && [[ "${minutes_zero}" == "oui" ]]; }; then
+        if [[ "${gotify_always}" == "oui" ]] || [ ${gotify_priority} -eq ${gotify_priority_error} ] || [ ${gotify_priority} -eq ${gotify_priority_fail} ] || { [ ${gotify_priority} -eq ${gotify_priority_success} ] && ((heure % 2 == 0 && minutes == 0)); }; then
+            # if [[ "${gotify_always}" == "oui" ]] || [ ${gotify_priority} -eq ${gotify_priority_error} ] || [ ${gotify_priority} -eq ${gotify_priority_fail} ] || { [ ${gotify_priority} -eq ${gotify_priority_success} ] && [[ "${heure_paire}" == "oui" ]] && [[ "${minutes_zero}" == "oui" ]]; }; then
             URL="${gotify_url}/message?token=${gotify_token}"
             printf "\n\tSending Gotify Notification...\n"
-            /usr/bin/curl -s -S --data '{"message": "'"${message}"'", "title": "'"${title}"'", "priority":'"${gotify_priority}"', "extras": {"client::display": {"contentType": "text/markdown"}}}' -X POST -H Content-Type:application/json "${URL}" &>/dev/null
+            # /usr/bin/curl -s -S --data '{"message": "'"${message}"'", "title": "'"${title}"'", "priority":'"${gotify_priority}"', "extras": {"client::display": {"contentType": "text/markdown"}}}' -X POST -H Content-Type:application/json "${URL}" &>/dev/null
+            # In order to accept the escape characters, the post command must be in text/plain
+            /usr/bin/curl -s -S -X POST "${URL}" -H "accept: application/json" -H "Content-Type: application/json" --data "{ \"message\": \"${message}\", \"title\": \"${title}\", \"priority\": ${gotify_priority}, \"extras\": {\"client::display\": {\"contentType\": \"text/plain\"}}}" &>/dev/null
             printf "\n"
         fi
     fi
@@ -199,14 +206,20 @@ function driver_restart_reload() {
 }
 
 function disable_ipv6() {
-    _interface=$1
     # Disable ipv6
-    if [[ "${ipv6}" == "no" ]] && [[ $(cat /proc/net/if_inet6 | grep $_interface) != "" ]]; then
-        printf "\tDeactivation of ipv6 on interface %s in 5s...\n" $_interface
-        message="$message\tDeactivation of ipv6 on interface $_interface in 5s...\n"
-        sleep 5s
-        sudo ip -6 addr flush $_interface
+    _interface="$1"
+    if [[ "${ipv6}" == "no" ]]; then
+        if [[ $(cat /proc/net/if_inet6 | grep "${_interface}") != "" ]]; then
+            printf "\tDeactivation of ipv6 on interface %s in 5s...\n" "${_interface}"
+            message="${message}\tDeactivation of ipv6 on interface ${_interface} in 5s...\n"
+            sleep 5s
+            sudo ip -6 addr flush "${_interface}"
+        else
+            printf "\tIpv6 on interface %s is already deactivated.\n" "${_interface}"
+            message="${message}\tIpv6 on interface ${_interface} is already deactivated.\n"
+        fi
     fi
+
 }
 
 function get_status() { # Get status from the pkgctl-r8152 driver
@@ -226,29 +239,29 @@ function get_status() { # Get status from the pkgctl-r8152 driver
     #       - enable_status must be "enabled"
     printf "\t"
     printf %s "$package_onoff"
-    printf " , version is %s\n" $package_version
+    printf " , version is %s\n" "$package_version"
 
-    printf "\n\tpkgctl-r8152 active_status = %s\n" $active_status
-    printf "\tpkgctl-r8152 load_status = %s\n" $load_status
-    printf "\tpkgctl-r8152 enable_status = %s\n\n" $enable_status
+    printf "\n\tpkgctl-r8152 active_status = %s\n" "$active_status"
+    printf "\tpkgctl-r8152 load_status = %s\n" "$load_status"
+    printf "\tpkgctl-r8152 enable_status = %s\n\n" "$enable_status"
 
-    message="$message\t\n\tpkgctl-r8152 active_status = $active_status\n"
-    message="$message\tpkgctl-r8152 load_status = $load_status\n"
-    message="$message\tpkgctl-r8152 enable_status = $enable_status\n\n"
+    message="${message}\t\n\tpkgctl-r8152 active_status = $active_status\n"
+    message="${message}\tpkgctl-r8152 load_status = $load_status\n"
+    message="${message}\tpkgctl-r8152 enable_status = $enable_status\n\n"
 
     if [[ "${active_status}" != "active" ]] || [[ "${load_status}" != "loaded" ]] || [[ "${enable_status}" != "enabled" ]]; then
         # The driver need to be restarted or reloaded
         printf "\tThe driver status AREN'T OK !\n\tThe driver need to be restarted or reloaded !\n"
-        message="$message\tThe driver status AREN'T OK !\n\tThe driver need to be restarted or reloaded !\n"
+        message="${message}\tThe driver status AREN'T OK !\n\tThe driver need to be restarted or reloaded !\n"
         driver_ok_ko="KO"
     elif [[ "${active_status}" = "active" ]] && [[ "${load_status}" = "loaded" ]] && [[ "${enable_status}" = "enabled" ]]; then
         # The driver is well started and loaded
         printf "\tThe driver status are OK ! No need to do something more.\n"
-        message="$message\tThe driver status are OK ! No need to do something more.\n"
+        message="${message}\tThe driver status are OK ! No need to do something more.\n"
         # No need to do something more here
     else
-        printf "\tUnknown error with get_status() ! code = %d\n" $RESULT
-        message="$message\tUnknown error with get_status() ! code = $RESULT\n"
+        printf "\tUnknown error with get_status() ! code = %d\n" "$RESULT"
+        message="${message}\tUnknown error with get_status() ! code = $RESULT\n"
         send_gotify_notification
         exit 1
     fi
@@ -266,46 +279,72 @@ function ping_gateway() { # Check gateway availability to ping
 
     if [ -z "$gateway" ]; then
         printf "\n\tError ! No gateway found with the 'ip r' command...\n"
-        message="$message\n\tError ! No gateway found with the 'ip r' command...\n"
+        message="${message}\n\tError ! No gateway found with the 'ip r' command...\n"
 
         send_gotify_notification
         exit 99
     else
         printf "\tgateway is = %s\n" $gateway
-        message="$message\tgateway is = $gateway\n"
+        message="${message}\tgateway is = $gateway\n"
 
         sudo ping -I $interface -q -t 2 -c 1 $gateway >/dev/null && PING="OK" || PING="not-OK"
     fi
 
 }
 
-function reactivate_eth0() {
-    sudo ifconfig eth0 up
-    disable_ipv6 eth0
-    eth0_IP=$(ip addr show eth0 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1) # Thanks to : https://askubuntu.com/a/560466
-    printf "\n\teth0 should be up now. You can connect the NAS on %s in order to sort things out...\nExiting script now.\n" $eth0_IP
-    message="$message\n\teth0 should be up now. You can connect the NAS on $eth0_IP in order to sort things out...\nExiting script now.\n"
+function reactivate_eth0_ethX() {
+    for embedded_interface_i in "${embedded_interface_to_deactivate[@]}"; do
+        sudo ifconfig "${embedded_interface_i}" up
+        disable_ipv6 "${embedded_interface_i}"
+        ethx_IP=$(ip addr show "${embedded_interface_i}" | grep "inet\b" | awk '{print $2}' | cut -d/ -f1) # Thanks to : https://askubuntu.com/a/560466
+        printf "\t-> %s should be up now. You can connect the NAS on %s in order to sort things out...\n" "${embedded_interface_i}" "${ethx_IP}"
+        message="${message}\n\t-> ${embedded_interface_i} should be up now. You can connect the NAS on ${ethx_IP} in order to sort things out...\n"
+    done
+    printf "  => Exiting script now.\n"
+    message="${message}  => Exiting script now.\n"
     gotify_priority=${gotify_priority_fail}
     send_gotify_notification
     exit 1
 }
 
-function deactivate_eth0_if_up() {
-    # Test if eth0 is already down or still up
-    if [[ -n "$(ip a show eth0 up)" ]]; then
-        printf "\n\teth0 is still up and running. Shutting down now.\n"
-        message="$message\n\teth0 is still up and running. Shutting down now.\n"
-        sudo ifconfig eth0 down
-    else
-        printf "\n\teth0 is already down.\n"
-        message="$message\n\teth0 is already down.\n"
-    fi
+function deactivate_eth0_ethX_if_up() {
+    # Test if eth0...ethX is/are already down or still up
+    for embedded_interface_i in "${embedded_interface_to_deactivate[@]}"; do
+        if [[ -n "$(ip a show ${embedded_interface_i} up)" ]]; then
+            printf "\t%s is still up and running. Shutting down now.\n" "${embedded_interface_i}"
+            message="${message}\t${embedded_interface_i} is still up and running. Shutting down now.\n"
+            sudo ifconfig "${embedded_interface_i}" down
+        else
+            printf "\t%s is already down.\n" "${embedded_interface_i}"
+            message="${message}\t${embedded_interface_i} is already down.\n"
+        fi
+    done
 
 }
 
 # ====================================================================================== #
 # ===================================== Main script ==================================== #
 # ====================================================================================== #
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║ Check if the interfaces to disable aren't including the one we need to   ║
+# ║ be up and running                                                        ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+message=""
+for embedded_interface_i in "${embedded_interface_to_deactivate[@]}"; do
+    if [[ "${embedded_interface_i}" == "${interface}" ]]; then
+        message="The interface '${embedded_interface_i}' you want disabled is the 2,5G / 5G interface you want to keep up and running.\nReview your settings... Exiting now.\n"
+        # printf "%s" "$message"
+        printf "The interface '%s' you want disabled is the 2,5G / 5G interface you want to keep up and running.\nReview your settings... Exiting now.\n" "${embedded_interface_i}"
+        send_gotify_notification
+        exit 1
+    fi
+done
+string_value=$(printf "%s" "${embedded_interface_to_deactivate[*]}")
+# printf -v message "%s : will be deactivated if '%s' is up and running.\n" "${string_value[*]// /, }" "${interface}"
+message="  => ${string_value[*]// /, } : will be deactivated if '${interface}' is up and running.\n"
+printf "  => %s : will be deactivated if '%s' is up and running.\n" "${string_value[*]// /, }" "${interface}"
+# ╚══════════════════════════════════════════════════════════════════════════╝
 
 # I assume that just after the boot, the driver may be not loaded for various reasons...
 # Or after some time, the driver may fail, and the connectivity won't work anymore.
@@ -324,8 +363,8 @@ for ((i = 1; i < 3; i++)); do
         if ((i == 2)); then
             # We are on the 2nd try, and the driver is still not OK !
             printf "\n\tThe driver is still not OK on the 2nd try !\nThat's not good...\nIt means the %s isn't working... So let's reactivate the eth0 interface." $interface
-            message="$message\n\tThe driver is still not OK on the 2nd try !\nThat's not good...\nIt means the $interface isn't working... So let's reactivate the eth0 interface."
-            reactivate_eth0
+            message="${message}\n\tThe driver is still not OK on the 2nd try !\nThat's not good...\nIt means the ${interface} isn't working... So let's reactivate the eth0 interface."
+            reactivate_eth0_ethX
         fi
 
         driver_restart_reload
@@ -338,34 +377,34 @@ for ((i = 1; i < 3; i++)); do
             # Ping isn't OK...
             if ((i == 1)); then
                 # This is the first run
-                printf "\tgateway %s IS NOT accessible !\n\tThe driver need to be restarted or reloaded !\n" $gateway
-                message="$message\tgateway $gateway IS NOT accessible !\n\tThe driver need to be restarted or reloaded !\n"
+                printf "\tGateway %s IS NOT accessible !\n\tThe driver need to be restarted or reloaded !\n" "$gateway"
+                message="${message}\tgateway ${gateway} IS NOT accessible !\n\tThe driver need to be restarted or reloaded !\n"
                 driver_ok_ko="KO"
                 driver_restart_reload
             else
                 # This is the 2nd run
                 printf "\tThis is the second try, and the ping on this try isn't OK... \nIt means the %s isn't working... So let's reactivate the eth0 interface." $interface
-                message="$message\tThis is the second try, and the ping on this try isn't OK... \nIt means the $interface isn't working... So let's reactivate the eth0 interface."
-                reactivate_eth0
+                message="${message}\tThis is the second try, and the ping on this try isn't OK... \nIt means the ${interface} isn't working... So let's reactivate the eth0 interface."
+                reactivate_eth0_ethX
             fi
 
         else
             # Ping is OK
             if ((i == 1)); then
                 # This is the first run
-                printf "\tgateway %s is accessible ! No need to do something more.\n" $gateway
-                message="$message\tgateway $gateway is accessible !\t\nNo need to do something more.\n"
-                disable_ipv6 $interface
-                deactivate_eth0_if_up
+                printf "\tgateway %s is accessible ! No need to do something more.\n" "$gateway"
+                message="${message}\tgateway ${gateway} is accessible !\t\nNo need to do something more.\n"
+                disable_ipv6 ${interface}
+                deactivate_eth0_ethX_if_up
                 gotify_priority=${gotify_priority_success}
                 send_gotify_notification
                 exit 0
             else
                 # This is the 2nd run
-                printf "\tgateway %s is now accessible (on the 2nd run) !\nNote : the status wasn't OK before...\n" $gateway
-                message="$message\tgateway $gateway is accessible !\t\nNo need to do something more.\n"
+                printf "\tgateway %s is now accessible (on the 2nd run) !\nNote : the status wasn't OK before...\n" "$gateway"
+                message="${message}\tgateway $gateway is accessible !\t\nNo need to do something more.\n"
                 disable_ipv6 $interface
-                deactivate_eth0_if_up
+                deactivate_eth0_ethX_if_up
                 gotify_priority=${gotify_priority_error}
                 send_gotify_notification
                 exit 1

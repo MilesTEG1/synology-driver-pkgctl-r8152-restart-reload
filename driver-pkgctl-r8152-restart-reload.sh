@@ -10,7 +10,9 @@
 # ║                                 for Synology NAS                                       ║
 # ║                                 ----------------                                       ║
 # ╚════════════════════════════════════════════════════════════════════════════════════════╝
-
+#
+#   Version 1.3
+#
 #  /!\ Need to be launched in root mode in SSH CLI, or in the task planner in DSM
 #
 # chmod 760 ./driver-pkgctl-r8152-restart-reload.sh
@@ -51,11 +53,9 @@ gateway=""
 # gateway="192.168.2.203"
 
 ## Variables Gotify
-
 # Set gotify_notif to   false to disable gotify notification
 #                       true to enable gotify notification
 gotify_notif=true
-
 gotify_url=https://gotify.ndd.tld
 gotify_token=xxxx-token-xxx
 
@@ -108,6 +108,7 @@ display_help() {
     echo "                           manual     set script to a manual launch (from CLI)"
     echo
     echo "      -n, --notify         [Optionnal, always send gotify notification]"
+    echo "      -r, --reactivate_all_down_ethX [Optional, and do only reactivation of all ethX interfaces it find with ip link"]
     echo
     # echo some stuff here for the -a or --add-options
     exit 1
@@ -137,13 +138,16 @@ else
     esac
 fi
 
-if [[ "${arg2}" == "--notify" ]] || [[ "${arg2}" == "-n" ]]; then
-    gotify_always="oui"
-elif [[ "${arg2}" != "--notify" ]] && [[ -n "${arg2}" ]]; then
-    echo "Unknown 2nd parameter passed: $1"
-    display_help
-elif [[ -z "${arg2}" ]]; then
+if [[ -z "${arg2}" ]]; then
     gotify_always="non"
+elif [[ "${arg2}" == "--notify" ]] || [[ "${arg2}" == "-n" ]]; then
+    gotify_always="oui"
+elif [[ "${arg2}" == "--reactivate_all_down_ethX" ]] || [[ "${arg2}" == "-r" ]]; then
+    # This will exit after this function (exit is inside the function).
+    reactivation_all="true"
+else
+    printf "Unknown 2nd parameter passed: %s" "$1"
+    display_help
 fi
 
 if [[ "${mode}" == "boot" ]] || [[ "${mode}" == "manual" ]]; then
@@ -292,6 +296,27 @@ function ping_gateway() { # Check gateway availability to ping
 
 }
 
+function reactivate_all_down_ethX() {
+    printf "Reactivation of all Ethernet interfaces."
+    all_eth_interfaces=$(ip link | grep " eth" | awk -F ": " '{print $2}')
+
+    for all_eth_interfaces_i in ${all_eth_interfaces[*]}; do
+        printf "\nall_eth_interfaces = %s" "${all_eth_interfaces_i}"
+
+        ifconfig "${all_eth_interfaces_i}" up
+        disable_ipv6 "${all_eth_interfaces_i}"
+        ethx_IP=$(ip addr show "${all_eth_interfaces_i}" | grep "inet\b" | awk '{print $2}' | cut -d/ -f1) # Thanks to : https://askubuntu.com/a/560466
+        printf "\t-> %s should be up now. You can connect the NAS on %s in order to sort things out...\n" "${all_eth_interfaces_i}" "${ethx_IP}"
+        message="${message}\n\t-> ${all_eth_interfaces_i} should be up now. You can connect the NAS on ${ethx_IP} in order to sort things out...\n"
+    done
+    printf "  => Exiting script now.\n"
+    message="${message}  => Exiting script now.\n"
+    gotify_priority=${gotify_priority_success}
+    send_gotify_notification
+    printf "\n"
+    exit 0
+}
+
 function reactivate_eth0_ethX() {
     for embedded_interface_i in "${embedded_interface_to_deactivate[@]}"; do
         sudo ifconfig "${embedded_interface_i}" up
@@ -331,6 +356,11 @@ function deactivate_eth0_ethX_if_up() {
 # ║ be up and running                                                        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 message=""
+
+if [[ "${reactivation_all}" == "true" ]]; then
+    reactivate_all_down_ethX
+fi
+
 for embedded_interface_i in "${embedded_interface_to_deactivate[@]}"; do
     if [[ "${embedded_interface_i}" == "${interface}" ]]; then
         message="The interface '${embedded_interface_i}' you want disabled is the 2,5G / 5G interface you want to keep up and running.\nReview your settings... Exiting now.\n"
@@ -340,6 +370,7 @@ for embedded_interface_i in "${embedded_interface_to_deactivate[@]}"; do
         exit 1
     fi
 done
+
 string_value=$(printf "%s" "${embedded_interface_to_deactivate[*]}")
 # printf -v message "%s : will be deactivated if '%s' is up and running.\n" "${string_value[*]// /, }" "${interface}"
 message="  => ${string_value[*]// /, } : will be deactivated if '${interface}' is up and running.\n"

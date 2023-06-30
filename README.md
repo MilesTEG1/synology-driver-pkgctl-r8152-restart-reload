@@ -9,7 +9,33 @@ Tested on my DS920+ with:
   - DSM 7.2-64570
   - DSM 7.2-64570 Update 1
 
-## Autmaticaly run the script with Task manager in DSM
+<br>
+
+------------
+
+<br>
+
+## 1. Usage (without any arguments or with `--help` or `-h`)
+
+```
+Usage: driver-pkgctl-r8152-restart-reload.sh {boot|task|manual} [--notify]
+
+      {boot|task|manual} : Launch mode, mandatory
+                           boot       set script to a launch after boot
+                           task       set script to a task manager schedule launch
+                           manual     set script to a manual launch (from CLI)
+
+      -n, --notify         [Optionnal, always send gotify notification]
+      -r, --reactivate_all_down_ethX [Optional, and do only reactivation of all ethX interfaces it find with ip link]
+```
+
+<br>
+
+------------
+
+<br>
+
+## 2. Autmaticaly run the script with Task manager in DSM
 
 In order to use the script automatically, I suggest to create 2 tasks in DSM tasks manager:
 
@@ -27,7 +53,13 @@ In order to use the script automatically, I suggest to create 2 tasks in DSM tas
    bash driver-pkgctl-r8152-restart-reload.sh task
    ```
 
-## Manual use
+<br>
+
+------------
+
+<br>
+
+## 3. Manual use
 
 If you want to launch it manually from the terminal, use :
 ```bash
@@ -37,4 +69,17 @@ bash driver-pkgctl-r8152-restart-reload.sh manual
 You can also force gotify notifications with `-n` or `--notify` :
 ```bash
 bash driver-pkgctl-r8152-restart-reload.sh manual -n
+```
+
+<br>
+
+------------
+
+<br>
+
+## 4. Reactivate all deactivated interface
+
+If you want to ractivate all your deactivated interface, use:
+```shell
+   bash driver-pkgctl-r8152-restart-reload.sh manual --reactivate_all_down_ethX
 ```

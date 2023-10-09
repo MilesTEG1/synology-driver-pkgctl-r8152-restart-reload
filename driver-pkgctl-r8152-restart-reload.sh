@@ -35,16 +35,21 @@ arg2=$2
 ipv6="no"
 
 #   Set to the interface in 2,5G/5G you want to check : eth0 or eth1, or eth2 ...
-#   In Synology NAS :
+#   In Synology NAS, the physical interfaces are :
 #       - eth0 = LAN1
 #       - eth1 = LAN2
 #       - eth2 = LAN3
 #       - eth3 = LAN4
+# Be aware that is it to be the physical interface without ovs (Open vSwitch) installed, not the ovs_ one. The ovs is to be dealt after.
 interface="eth2"
 
-# Add embedded interfaces you want to disable when $interface is up and running correctly
+# Set this to true of Open vSwitch is activated, or false if not. This will be used to manage the ovs_ethX in the script.
+ovs="true"
+
+# Add embedded physical interfaces you want to disable when $interface is up and running correctly
 # and enable when $interface isn't working correctly.
 # Choose wisely!
+# And do not set ovs_ethX, it will be handled differently.
 embedded_interface_to_deactivate=("eth0" "eth1")
 
 #   Set the gateway to test (could be whatever IP address you want to ping)
@@ -212,6 +217,13 @@ function driver_restart_reload() {
 function disable_ipv6() {
     # Disable ipv6
     _interface="$1"
+
+    if [[ "${ovs}" == "true" ]]; then
+        # VMM and Open vSwitch are installed
+        # So the physical ethX haven't any IP adresses, they're on the ovs_ethX !
+        _interface="ovs_${_interface}"
+    fi
+
     if [[ "${ipv6}" == "no" ]]; then
         if [[ $(cat /proc/net/if_inet6 | grep "${_interface}") != "" ]]; then
             printf "\tDeactivation of ipv6 on interface %s in 5s...\n" "${_interface}"
@@ -260,8 +272,8 @@ function get_status() { # Get status from the pkgctl-r8152 driver
         driver_ok_ko="KO"
     elif [[ "${active_status}" = "active" ]] && [[ "${load_status}" = "loaded" ]] && [[ "${enable_status}" = "enabled" ]]; then
         # The driver is well started and loaded
-        printf "\tThe driver status are OK ! No need to do something more.\n"
-        message="${message}\tThe driver status are OK ! No need to do something more.\n"
+        printf "\tThe driver status is OK ! No need to do something more.\n"
+        message="${message}\tThe driver status is OK ! No need to do something more.\n"
         # No need to do something more here
     else
         printf "\tUnknown error with get_status() ! code = %d\n" "$RESULT"
@@ -272,6 +284,14 @@ function get_status() { # Get status from the pkgctl-r8152 driver
 }
 
 function ping_gateway() { # Check gateway availability to ping
+
+    _interface="$1"
+
+    if [[ "${ovs}" == "true" ]]; then
+        # VMM and Open vSwitch are installed
+        # So the physical ethX haven't any IP adresses, they're on the ovs_ethX !
+        _interface="ovs_${_interface}"
+    fi
 
     iteration_ping=$((iteration_ping + 1))
 
@@ -291,7 +311,7 @@ function ping_gateway() { # Check gateway availability to ping
         printf "\tgateway is = %s\n" $gateway
         message="${message}\tgateway is = $gateway\n"
 
-        sudo ping -I $interface -q -t 2 -c 1 $gateway >/dev/null && PING="OK" || PING="not-OK"
+        sudo ping -I $_interface -q -t 2 -c 1 $gateway >/dev/null && PING="OK" || PING="not-OK"
     fi
 
 }
@@ -301,13 +321,25 @@ function reactivate_all_down_ethX() {
     all_eth_interfaces=$(ip link | grep " eth" | awk -F ": " '{print $2}')
 
     for all_eth_interfaces_i in ${all_eth_interfaces[*]}; do
-        printf "\nall_eth_interfaces = %s" "${all_eth_interfaces_i}"
-
-        ifconfig "${all_eth_interfaces_i}" up
+        printf "\nInterface being processed : %s" "${all_eth_interfaces_i}"
+        printf "\n\tReactivation of %s." "${all_eth_interfaces_i}"
+        sudo ifconfig "${all_eth_interfaces_i}" up
+        printf " Done.\n"
         disable_ipv6 "${all_eth_interfaces_i}"
-        ethx_IP=$(ip addr show "${all_eth_interfaces_i}" | grep "inet\b" | awk '{print $2}' | cut -d/ -f1) # Thanks to : https://askubuntu.com/a/560466
-        printf "\t-> %s should be up now. You can connect the NAS on %s in order to sort things out...\n" "${all_eth_interfaces_i}" "${ethx_IP}"
-        message="${message}\n\t-> ${all_eth_interfaces_i} should be up now. You can connect the NAS on ${ethx_IP} in order to sort things out...\n"
+        if [[ "${ovs}" == "true" ]]; then
+            # VMM and Open vSwitch are installed
+            sudo ifconfig "ovs_${all_eth_interfaces_i}" up
+            # No more use for this here.
+            # disable_ipv6 "ovs_${all_eth_interfaces_i}"
+            ethx_IP=$(ip addr show "ovs_${all_eth_interfaces_i}" | grep "inet\b" | awk '{print $2}' | cut -d/ -f1) # Thanks to : https://askubuntu.com/a/560466
+            printf "\t-> %s should be up now. You can connect the NAS on %s in order to sort things out...\n" "ovs_${all_eth_interfaces_i}" "${ethx_IP}"
+            message="${message}\n\t-> ovs_${all_eth_interfaces_i} should be up now. You can connect the NAS on ${ethx_IP} in order to sort things out...\n"
+
+        elif  [[ "${ovs}" == "false" ]]; then
+            ethx_IP=$(ip addr show "${all_eth_interfaces_i}" | grep "inet\b" | awk '{print $2}' | cut -d/ -f1) # Thanks to : https://askubuntu.com/a/560466
+            printf "\t-> %s should be up now. You can connect the NAS on %s in order to sort things out...\n" "${all_eth_interfaces_i}" "${ethx_IP}"
+            message="${message}\n\t-> ${all_eth_interfaces_i} should be up now. You can connect the NAS on ${ethx_IP} in order to sort things out...\n"
+        fi
     done
     printf "  => Exiting script now.\n"
     message="${message}  => Exiting script now.\n"
@@ -319,11 +351,26 @@ function reactivate_all_down_ethX() {
 
 function reactivate_eth0_ethX() {
     for embedded_interface_i in "${embedded_interface_to_deactivate[@]}"; do
+        printf "\n\tReactivation of %s." "${embedded_interface_i}"
         sudo ifconfig "${embedded_interface_i}" up
+        printf " Done.\n"
         disable_ipv6 "${embedded_interface_i}"
-        ethx_IP=$(ip addr show "${embedded_interface_i}" | grep "inet\b" | awk '{print $2}' | cut -d/ -f1) # Thanks to : https://askubuntu.com/a/560466
-        printf "\t-> %s should be up now. You can connect the NAS on %s in order to sort things out...\n" "${embedded_interface_i}" "${ethx_IP}"
-        message="${message}\n\t-> ${embedded_interface_i} should be up now. You can connect the NAS on ${ethx_IP} in order to sort things out...\n"
+
+        if [[ "${ovs}" == "true" ]]; then
+            # VMM and Open vSwitch are installed
+            printf "\n\tReactivation of ${embedded_interface_i} because of Open vSwitch installed with VMM.\n"
+            sudo ifconfig "ovs_${embedded_interface_i}" up
+            # No more use for this here.
+            # disable_ipv6 "ovs_${embedded_interface_i}"
+            ethx_IP=$(ip addr show "ovs_${embedded_interface_i}" | grep "inet\b" | awk '{print $2}' | cut -d/ -f1) # Thanks to : https://askubuntu.com/a/560466
+            printf "\t-> %s should be up now. You can connect the NAS on %s in order to sort things out...\n" "ovs_${all_eth_interfaces_i}" "${ethx_IP}"
+            message="${message}\n\t-> ovs_${embedded_interface_i} should be up now. You can connect the NAS on ${ethx_IP} in order to sort things out...\n"
+
+        elif [[ "${ovs}" == "false" ]]; then
+            ethx_IP=$(ip addr show "${embedded_interface_i}" | grep "inet\b" | awk '{print $2}' | cut -d/ -f1) # Thanks to : https://askubuntu.com/a/560466
+            printf "\t-> %s should be up now. You can connect the NAS on %s in order to sort things out...\n" "${embedded_interface_i}" "${ethx_IP}"
+            message="${message}\n\t-> ${embedded_interface_i} should be up now. You can connect the NAS on ${ethx_IP} in order to sort things out...\n"
+        fi
     done
     printf "  => Exiting script now.\n"
     message="${message}  => Exiting script now.\n"
@@ -335,6 +382,18 @@ function reactivate_eth0_ethX() {
 function deactivate_eth0_ethX_if_up() {
     # Test if eth0...ethX is/are already down or still up
     for embedded_interface_i in "${embedded_interface_to_deactivate[@]}"; do
+# See : https://unix.stackexchange.com/a/293319
+        
+        if [[ "${ovs}" == "true" ]]; then
+            if [[ -n "$(ip a show ovs_${embedded_interface_i} up)" ]]; then
+                printf "\tovs_%s is still up and running. Shutting down now.\n" "${embedded_interface_i}"
+                message="${message}\tovs_${embedded_interface_i} is still up and running. Shutting down now.\n"
+                sudo ifconfig "ovs_${embedded_interface_i}" down
+            else
+                printf "\tovs_%s is already down.\n" "${embedded_interface_i}"
+                message="${message}\tovs_${embedded_interface_i} is already down.\n"
+            fi
+        fi
         if [[ -n "$(ip a show ${embedded_interface_i} up)" ]]; then
             printf "\t%s is still up and running. Shutting down now.\n" "${embedded_interface_i}"
             message="${message}\t${embedded_interface_i} is still up and running. Shutting down now.\n"
@@ -344,7 +403,6 @@ function deactivate_eth0_ethX_if_up() {
             message="${message}\t${embedded_interface_i} is already down.\n"
         fi
     done
-
 }
 
 # ====================================================================================== #
@@ -371,10 +429,15 @@ for embedded_interface_i in "${embedded_interface_to_deactivate[@]}"; do
     fi
 done
 
+if [[ "${ovs}" == "true" ]]; then
+    message="  => As VMM is installed and Open vSwitch is activated, all physical interfaces will be managed with the virtual one (ovs_ethX).\n  => So when we'll see ethX, ovs_ethX will be managed as well.\n"
+    printf "  => As VMM is installed and Open vSwitch is activated, all physical interfaces will be managed with the virtual one (ovs_ethX).\n  => So when we'll see ethX, ovs_ethX will be managed as well.\n"
+fi
 string_value=$(printf "%s" "${embedded_interface_to_deactivate[*]}")
 # printf -v message "%s : will be deactivated if '%s' is up and running.\n" "${string_value[*]// /, }" "${interface}"
-message="  => ${string_value[*]// /, } : will be deactivated if '${interface}' is up and running.\n"
+message="${message}  => ${string_value[*]// /, } : will be deactivated if '${interface}' is up and running.\n"
 printf "  => %s : will be deactivated if '%s' is up and running.\n" "${string_value[*]// /, }" "${interface}"
+
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
 # I assume that just after the boot, the driver may be not loaded for various reasons...
@@ -403,7 +466,7 @@ for ((i = 1; i < 3; i++)); do
     else
         # The driver status is OK !
         # Let's try the ping function
-        ping_gateway
+        ping_gateway $interface
         if [[ "${PING}" == "not-OK" ]]; then
             # Ping isn't OK...
             if ((i == 1)); then

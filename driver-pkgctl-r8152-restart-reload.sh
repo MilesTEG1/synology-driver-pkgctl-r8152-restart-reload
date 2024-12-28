@@ -11,7 +11,7 @@
 # ║                                 ----------------                                       ║
 # ╚════════════════════════════════════════════════════════════════════════════════════════╝
 #
-#   Version 1.3
+#   Version 1.4
 #
 #  /!\ Need to be launched in root mode in SSH CLI, or in the task planner in DSM
 #
@@ -43,8 +43,6 @@ ipv6="no"
 # Be aware that is it to be the physical interface without ovs (Open vSwitch) installed, not the ovs_ one. The ovs is to be dealt after.
 interface="eth2"
 
-# Set this to true of Open vSwitch is activated, or false if not. This will be used to manage the ovs_ethX in the script.
-ovs="true"
 
 # Add embedded physical interfaces you want to disable when $interface is up and running correctly
 # and enable when $interface isn't working correctly.
@@ -80,6 +78,17 @@ else
     fi
 fi
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+
+# Check if OVS is activated :
+if [[ -n "$(ifconfig | grep "ovs_")" ]]; then
+    echo "Open vSwitch est activé !"
+    ovs="true"
+else
+    echo "Open vSwitch n'est pas activé !"
+    ovs="false"
+fi
+# Set this to true of Open vSwitch is activated, or false if not. This will be used to manage the ovs_ethX in the script.
+# ovs="false"
 
 # ====================================================================================== #
 # ====================== Some variables needed, but not to touch ! ===================== #
@@ -193,6 +202,8 @@ function send_gotify_notification() {
             # /usr/bin/curl -s -S --data '{"message": "'"${message}"'", "title": "'"${title}"'", "priority":'"${gotify_priority}"', "extras": {"client::display": {"contentType": "text/markdown"}}}' -X POST -H Content-Type:application/json "${URL}" &>/dev/null
             # In order to accept the escape characters, the post command must be in text/plain
             /usr/bin/curl -s -S -X POST "${URL}" -H "accept: application/json" -H "Content-Type: application/json" --data "{ \"message\": \"${message}\", \"title\": \"${title}\", \"priority\": ${gotify_priority}, \"extras\": {\"client::display\": {\"contentType\": \"text/plain\"}}}" &>/dev/null
+            # /usr/bin/curl -s -S -X POST "${URL}" -H "accept: application/json" -H "Content-Type: application/json" --data "{ \"message\": \"${message}\", \"title\": \"${title}\", \"priority\": ${gotify_priority}, \"extras\": {\"client::display\": {\"contentType\": \"text/markdown\"}}}" &>/dev/null
+
             printf "\n"
         fi
     fi

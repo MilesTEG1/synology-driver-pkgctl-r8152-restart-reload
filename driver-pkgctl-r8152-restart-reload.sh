@@ -11,7 +11,7 @@
 # ║                                 ----------------                                       ║
 # ╚════════════════════════════════════════════════════════════════════════════════════════╝
 #
-#   Version 1.4
+#   Version 1.5
 #
 #  /!\ Need to be launched in root mode in SSH CLI, or in the task planner in DSM
 #
@@ -212,6 +212,13 @@ function send_gotify_notification() {
 function driver_restart_reload() {
     # Restart or reload the driver
     sudo synosystemctl reload-or-restart pkgctl-r8152
+
+    # In some case, the interface works fine, but the driver reports 'disabled' with 'synosystemctl get-enable-status pkgctl-r8152' command...
+    # Let's try to enable it again
+    if [[ "$(sudo synosystemctl get-enable-status pkgctl-r8152)" != "enabled" ]]; then
+        sudo synosystemctl enable pkgctl-r8152
+    fi
+
     echo ""
     # For the record, here some synosystemctl commands:
     #   start [--no-block] NAME...              Start (activate) one or more units
